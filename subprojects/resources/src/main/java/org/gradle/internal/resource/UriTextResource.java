@@ -17,22 +17,26 @@
 package org.gradle.internal.resource;
 
 import org.apache.commons.io.IOUtils;
+import org.gradle.api.Nullable;
+import org.gradle.api.resources.MissingResourceException;
+import org.gradle.api.resources.ResourceException;
 import org.gradle.internal.SystemProperties;
 import org.gradle.util.GradleVersion;
 
 import java.io.*;
 import java.net.URI;
 import java.net.URLConnection;
+import java.nio.charset.Charset;
 
 /**
- * A {@link Resource} implementation backed by a URI. Assumes content is encoded using UTF-8.
+ * A {@link TextResource} implementation backed by a URI. Assumes content is encoded using UTF-8.
  */
-public class UriResource implements Resource {
+public class UriTextResource implements TextResource {
     private final File sourceFile;
     private final URI sourceUri;
     private final String description;
 
-    public UriResource(String description, File sourceFile) {
+    public UriTextResource(String description, File sourceFile) {
         this.description = description;
         this.sourceFile = canonicalise(sourceFile);
         this.sourceUri = sourceFile.toURI();
@@ -46,12 +50,13 @@ public class UriResource implements Resource {
         }
     }
 
-    public UriResource(String description, URI sourceUri) {
+    public UriTextResource(String description, URI sourceUri) {
         this.description = description;
         this.sourceFile = sourceUri.getScheme().equals("file") ? canonicalise(new File(sourceUri.getPath())) : null;
         this.sourceUri = sourceUri;
     }
 
+    @Override
     public String getDisplayName() {
         StringBuilder builder = new StringBuilder();
         builder.append(description);
@@ -61,24 +66,54 @@ public class UriResource implements Resource {
         return builder.toString();
     }
 
-    public String getText() {
-        if (sourceFile != null && sourceFile.isDirectory()) {
-            throw new ResourceException(sourceUri, String.format("Could not read %s as it is a directory.", getDisplayName()));
-        }
+    @Override
+    public boolean isContentCached() {
+        return false;
+    }
+
+    @Override
+    public boolean getHasEmptyContent() {
+        Reader reader = getAsReader();
         try {
-            Reader reader = getInputStream(sourceUri);
+            try {
+                return reader.read() == -1;
+            } finally {
+                reader.close();
+            }
+        } catch (Exception e) {
+            throw ResourceExceptions.failure(sourceUri, String.format("Could not read %s.", getDisplayName()), e);
+        }
+    }
+
+    @Override
+    public String getText() {
+        Reader reader = getAsReader();
+        try {
             try {
                 return IOUtils.toString(reader);
             } finally {
                 reader.close();
             }
-        } catch (FileNotFoundException e) {
-            throw new ResourceNotFoundException(sourceUri, String.format("Could not read %s as it does not exist.", getDisplayName()));
         } catch (Exception e) {
-            throw ResourceException.failure(sourceUri, String.format("Could not read %s.", getDisplayName()), e);
+            throw ResourceExceptions.failure(sourceUri, String.format("Could not read %s.", getDisplayName()), e);
         }
     }
 
+    @Override
+    public Reader getAsReader() {
+        if (sourceFile != null && sourceFile.isDirectory()) {
+            throw new ResourceException(sourceUri, String.format("Could not read %s as it is a directory.", getDisplayName()));
+        }
+        try {
+            return getInputStream(sourceUri);
+        } catch (FileNotFoundException e) {
+            throw new MissingResourceException(sourceUri, String.format("Could not read %s as it does not exist.", getDisplayName()));
+        } catch (Exception e) {
+            throw ResourceExceptions.failure(sourceUri, String.format("Could not read %s.", getDisplayName()), e);
+        }
+    }
+
+    @Override
     public boolean getExists() {
         try {
             Reader reader = getInputStream(sourceUri);
@@ -90,7 +125,7 @@ public class UriResource implements Resource {
         } catch (FileNotFoundException e) {
             return false;
         } catch (Exception e) {
-            throw ResourceException.failure(sourceUri, String.format("Could not determine if %s exists.", getDisplayName()), e);
+            throw ResourceExceptions.failure(sourceUri, String.format("Could not determine if %s exists.", getDisplayName()), e);
         }
     }
 
@@ -102,12 +137,22 @@ public class UriResource implements Resource {
         return new InputStreamReader(urlConnection.getInputStream(), charset);
     }
 
+    @Override
     public File getFile() {
-        return sourceFile;
+        return sourceFile != null && sourceFile.isFile() ? sourceFile : null;
     }
 
-    public URI getURI() {
-        return sourceUri;
+    @Override
+    public Charset getCharset() {
+        if (getFile() != null) {
+            return Charset.forName("utf-8");
+        }
+        return null;
+    }
+
+    @Override
+    public ResourceLocation getLocation() {
+        return new UriResourceLocation();
     }
 
     public static String extractCharacterEncoding(String contentType, String defaultEncoding) {
@@ -201,4 +246,22 @@ public class UriResource implements Resource {
                 javaVendorVersion);
     }
 
+    private class UriResourceLocation implements ResourceLocation {
+        @Override
+        public String getDisplayName() {
+            return UriTextResource.this.getDisplayName();
+        }
+
+        @Nullable
+        @Override
+        public File getFile() {
+            return sourceFile;
+        }
+
+        @Nullable
+        @Override
+        public URI getURI() {
+            return sourceUri;
+        }
+    }
 }

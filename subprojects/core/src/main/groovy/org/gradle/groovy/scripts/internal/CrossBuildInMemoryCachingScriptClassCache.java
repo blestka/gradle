@@ -20,45 +20,32 @@ import com.google.common.cache.CacheBuilder;
 import groovy.lang.Script;
 import org.codehaus.groovy.ast.ClassNode;
 import org.gradle.api.Action;
-import org.gradle.api.internal.changedetection.state.CachingFileSnapshotter;
+import org.gradle.api.internal.changedetection.state.FileSnapshotter;
 import org.gradle.api.internal.initialization.loadercache.ClassLoaderId;
 import org.gradle.groovy.scripts.ScriptSource;
 import org.gradle.internal.Cast;
-import org.gradle.internal.hash.HashUtil;
-
-import java.io.File;
-import java.util.Arrays;
+import org.gradle.internal.hash.HashValue;
 
 public class CrossBuildInMemoryCachingScriptClassCache {
     private final Cache<Key, CachedCompiledScript> cachedCompiledScripts = CacheBuilder.newBuilder().maximumSize(100).recordStats().build();
-    private final CachingFileSnapshotter snapshotter;
+    private final FileSnapshotter snapshotter;
 
-    public CrossBuildInMemoryCachingScriptClassCache(CachingFileSnapshotter snapshotter) {
+    public CrossBuildInMemoryCachingScriptClassCache(FileSnapshotter snapshotter) {
         this.snapshotter = snapshotter;
     }
 
     public <T extends Script, M> CompiledScript<T, M> getOrCompile(ScriptSource source, ClassLoader classLoader, ClassLoaderId classLoaderId, CompileOperation<M> operation, Class<T> scriptBaseClass, Action<? super ClassNode> verifier, ScriptClassCompiler delegate) {
         Key key = new Key(source.getClassName(), classLoader, operation.getId());
         CachedCompiledScript cached = cachedCompiledScripts.getIfPresent(key);
-        byte[] hash = hashFor(source);
+        HashValue hash = snapshotter.snapshot(source.getResource()).getHash();
         if (cached != null) {
-            if (Arrays.equals(hash, cached.hash)) {
+            if (hash.equals(cached.hash)) {
                 return Cast.uncheckedCast(cached.compiledScript);
             }
         }
         CompiledScript<T, M> compiledScript = delegate.compile(source, classLoader, classLoaderId, operation, scriptBaseClass, verifier);
         cachedCompiledScripts.put(key, new CachedCompiledScript(hash, compiledScript));
         return compiledScript;
-    }
-
-    private byte[] hashFor(ScriptSource source) {
-        File file = source.getResource().getFile();
-        String hash;
-        if (file != null && file.exists()) {
-            CachingFileSnapshotter.FileInfo snapshot = snapshotter.snapshot(file);
-            return snapshot.getHash();
-        }
-        return HashUtil.createHash(source.getResource().getText(), "md5").asByteArray();
     }
 
     private static class Key {
@@ -98,10 +85,10 @@ public class CrossBuildInMemoryCachingScriptClassCache {
     }
 
     private static class CachedCompiledScript {
-        private final byte[] hash;
+        private final HashValue hash;
         private final CompiledScript<?, ?> compiledScript;
 
-        private CachedCompiledScript(byte[] hash, CompiledScript<?, ?> compiledScript) {
+        private CachedCompiledScript(HashValue hash, CompiledScript<?, ?> compiledScript) {
             this.hash = hash;
             this.compiledScript = compiledScript;
         }

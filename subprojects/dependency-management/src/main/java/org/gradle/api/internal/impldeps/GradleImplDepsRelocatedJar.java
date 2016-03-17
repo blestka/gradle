@@ -25,22 +25,15 @@ import java.util.Set;
 public class GradleImplDepsRelocatedJar implements MinimalFileSet {
 
     private final String displayName;
-    private final Iterable<? extends File> files;
     private final File outputJar;
 
-    public GradleImplDepsRelocatedJar(String displayName, Iterable<? extends File> files, File outputJar) {
+    public GradleImplDepsRelocatedJar(String displayName, File outputJar) {
         this.displayName = displayName;
-        this.files = files;
         this.outputJar = outputJar;
     }
 
     @Override
     public Set<File> getFiles() {
-        if (!outputJar.exists()) {
-            outputJar.getParentFile().mkdirs();
-            GradleImplDepsRelocatedJarCreator.create(outputJar, files);
-        }
-
         return Collections.singleton(outputJar);
     }
 

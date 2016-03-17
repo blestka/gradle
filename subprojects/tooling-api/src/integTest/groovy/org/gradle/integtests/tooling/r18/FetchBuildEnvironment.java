@@ -1,5 +1,5 @@
 /*
- * Copyright 2011 the original author or authors.
+ * Copyright 2016 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,14 @@
  * limitations under the License.
  */
 
-package org.gradle.api.resources;
+package org.gradle.integtests.tooling.r18;
 
-/**
- * Exception thrown when the resource does not exist
- */
-public class MissingResourceException extends ResourceException {
-    public MissingResourceException(String message) {
-        super(message);
+import org.gradle.tooling.BuildAction;
+import org.gradle.tooling.BuildController;
+import org.gradle.tooling.model.build.BuildEnvironment;
+
+public class FetchBuildEnvironment implements BuildAction<BuildEnvironment> {
+    public BuildEnvironment execute(BuildController controller) {
+        return controller.getModel(BuildEnvironment.class);
     }
 }

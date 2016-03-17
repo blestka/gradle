@@ -16,25 +16,30 @@
 
 package org.gradle.plugins.ide.internal.tooling;
 
-import com.beust.jcommander.internal.Lists;
 import org.gradle.api.Project;
-import org.gradle.internal.jvm.Jvm;
+import org.gradle.process.internal.CurrentProcess;
 import org.gradle.tooling.internal.build.DefaultBuildEnvironment;
 import org.gradle.tooling.provider.model.ToolingModelBuilder;
 
 import java.io.File;
 import java.util.List;
 
+/**
+ * Builds the GradleProject that contains the project hierarchy and task information
+ */
 public class BuildEnvironmentBuilder implements ToolingModelBuilder {
     public boolean canBuild(String modelName) {
         return modelName.equals("org.gradle.tooling.model.build.BuildEnvironment");
     }
 
-    public DefaultBuildEnvironment buildAll(String modelName, Project target) {
+    public Object buildAll(String modelName, Project target) {
         File gradleUserHomeDir = target.getGradle().getGradleUserHomeDir();
         String gradleVersion = target.getGradle().getGradleVersion();
-        File javaHome = Jvm.current().getJavaHome();
-        List<String> jvmArgs = Lists.newArrayList();
+
+        CurrentProcess currentProcess = new CurrentProcess();
+        File javaHome = currentProcess.getJvm().getJavaHome();
+        List<String> jvmArgs = currentProcess.getJvmOptions().getAllImmutableJvmArgs();
+
         return new DefaultBuildEnvironment(gradleUserHomeDir, gradleVersion, javaHome, jvmArgs);
     }
 }

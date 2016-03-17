@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 the original author or authors.
+ * Copyright 2016 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,4 @@
  * limitations under the License.
  */
 
-package org.gradle.internal.resource;
-
-import java.net.URI;
-
-/**
- * An exception thrown when attempting to access the content of a {@link Resource} which does not exist.
- */
-public class ResourceNotFoundException extends ResourceException {
-    public ResourceNotFoundException(URI location, String message) {
-        super(location, message);
-    }
-
-    public ResourceNotFoundException(URI location, String message, Throwable cause) {
-        super(location, message, cause);
-    }
-}
+// This lib should not have any dependencies.
