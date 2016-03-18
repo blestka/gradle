@@ -85,7 +85,6 @@ public class CompositeBuildModelActionRunner implements CompositeBuildActionRunn
             .build();
         compositeServices.add(CompositeBuildContext.class, context);
         compositeServices.addProvider(new CompositeScopeServices(parentStartParam, compositeServices));
-
         boolean buildFound = false;
         for (GradleParticipantBuild participant : participantBuilds) {
             if (!participant.getProjectDir().getAbsolutePath().equals(compositeParameters.getCompositeTargetBuildRootDir().getAbsolutePath())) {
@@ -99,8 +98,10 @@ public class CompositeBuildModelActionRunner implements CompositeBuildActionRunn
             startParameter.setProjectDir(participant.getProjectDir());
             startParameter.setSearchUpwards(false);
 
+            ServiceRegistry buildScopedServices = new BuildSessionScopeServices(compositeServices, startParameter, ClassPath.EMPTY);
+
             DefaultBuildRequestContext requestContext = new DefaultBuildRequestContext(new DefaultBuildRequestMetaData(new GradleLauncherMetaData(), System.currentTimeMillis()), new DefaultBuildCancellationToken(), new NoOpBuildEventConsumer());
-            launcherFactory.newInstance(startParameter, requestContext, compositeServices).run();
+            launcherFactory.newInstance(startParameter, requestContext, buildScopedServices).run();
         }
         if (!buildFound) {
             throw new IllegalStateException("Build not part of composite");
