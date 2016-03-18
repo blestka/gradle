@@ -14,5 +14,5 @@
  * limitations under the License.
  */
 
-rootProject.name = 'trans'
+rootProject.name = 'C'
 include 'c'
