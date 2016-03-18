@@ -2,8 +2,29 @@ import org.gradle.tooling.GradleConnector
 import org.gradle.tooling.model.GradleProject
 import org.gradle.tooling.model.eclipse.EclipseProject
 
+task runTask << {
+    def builder = GradleConnector.newGradleConnectionBuilder()
+    builder.embeddedCoordinator(true)
+    builder.useClasspathDistribution()
+
+    def buildIdentities = []
+    rootProjectDirectories().each {
+        println "Adding project $it.absolutePath to composite"
+        def participant = GradleConnector.newGradleBuildBuilder().forProjectDirectory(it).useInstallation(gradle.gradleHomeDir).create()
+        buildIdentities << participant.toBuildIdentity()
+        builder.addBuild(participant)
+    }
+    def connection = builder.build()
+
+    def buildLauncher = connection.newBuild(buildIdentities.iterator().next())
+    buildLauncher.forTasks("jar")
+    buildLauncher.run()
+}
+
 task printModel << {
     def builder = GradleConnector.newGradleConnectionBuilder()
+    builder.embeddedCoordinator(true)
+    builder.useClasspathDistribution()
     rootProjectDirectories().each {
         println "Adding project $it.absolutePath to composite"
         def participant = GradleConnector.newGradleBuildBuilder().forProjectDirectory(it).useInstallation(gradle.gradleHomeDir).create()
