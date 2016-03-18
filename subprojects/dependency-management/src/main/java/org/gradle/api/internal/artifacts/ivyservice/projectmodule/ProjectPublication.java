@@ -16,11 +16,7 @@
 
 package org.gradle.api.internal.artifacts.ivyservice.projectmodule;
 
-import org.gradle.api.Task;
 import org.gradle.api.artifacts.ModuleVersionIdentifier;
-import org.gradle.api.artifacts.PublishArtifact;
-
-import java.util.Set;
 
 /**
  * Provides information on a "logical" publication of a project.
@@ -29,7 +25,4 @@ import java.util.Set;
  */
 public interface ProjectPublication {
     ModuleVersionIdentifier getId();
-    Set<ModuleVersionIdentifier> getDependencies();
-    Set<PublishArtifact> getArtifacts();
-    Set<Task> getTasks();
 }
