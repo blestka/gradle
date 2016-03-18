@@ -54,7 +54,10 @@ public class DefaultGradleConnection implements GradleConnectionInternal {
 
     @Override
     public BuildLauncher newBuild(BuildIdentity buildIdentity) {
-        return new CompositeBuildLauncher(((BuildIdentityInternal) buildIdentity).getRootDirectory(), asyncConnection, parameters);
+        CompositeBuildLauncher compositeBuildLauncher = new CompositeBuildLauncher(((BuildIdentityInternal) buildIdentity).getRootDirectory(), asyncConnection, parameters);
+        compositeBuildLauncher.setStandardOutput(System.out);
+        compositeBuildLauncher.setStandardError(System.err);
+        return compositeBuildLauncher;
     }
 
     private <T> void checkSupportedModelType(Class<T> modelType) {
