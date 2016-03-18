@@ -17,6 +17,9 @@
 package org.gradle.tooling.internal.provider.runner;
 
 import org.gradle.StartParameter;
+import org.gradle.api.internal.artifacts.ivyservice.projectmodule.CompositeBuildContext;
+import org.gradle.api.internal.artifacts.ivyservice.projectmodule.CompositeContextBuilder;
+import org.gradle.api.internal.artifacts.ivyservice.projectmodule.CompositeScopeServices;
 import org.gradle.api.logging.LogLevel;
 import org.gradle.configuration.GradleLauncherMetaData;
 import org.gradle.initialization.*;
@@ -26,7 +29,9 @@ import org.gradle.internal.classpath.ClassPath;
 import org.gradle.internal.composite.*;
 import org.gradle.internal.invocation.BuildAction;
 import org.gradle.internal.invocation.BuildActionRunner;
+import org.gradle.internal.service.DefaultServiceRegistry;
 import org.gradle.internal.service.ServiceRegistry;
+import org.gradle.internal.service.ServiceRegistryBuilder;
 import org.gradle.internal.service.scopes.BuildSessionScopeServices;
 import org.gradle.launcher.daemon.configuration.DaemonUsage;
 import org.gradle.launcher.exec.BuildActionParameters;
@@ -72,7 +77,14 @@ public class CompositeBuildModelActionRunner implements CompositeBuildActionRunn
         CompositeParameters compositeParameters = actionParameters.getCompositeParameters();
         List<GradleParticipantBuild> participantBuilds = compositeParameters.getBuilds();
         GradleLauncherFactory launcherFactory = sharedServices.get(GradleLauncherFactory.class);
+        CompositeBuildContext context = constructCompositeContext(launcherFactory, participantBuilds);
 
+        DefaultServiceRegistry compositeServices = (DefaultServiceRegistry) ServiceRegistryBuilder.builder()
+            .displayName("Composite services")
+            .parent(sharedServices)
+            .build();
+        compositeServices.add(CompositeBuildContext.class, context);
+        compositeServices.addProvider(new CompositeScopeServices(parentStartParam, compositeServices));
         boolean buildFound = false;
         for (GradleParticipantBuild participant : participantBuilds) {
             if (!participant.getProjectDir().getAbsolutePath().equals(compositeParameters.getCompositeTargetBuildRootDir().getAbsolutePath())) {
@@ -86,8 +98,10 @@ public class CompositeBuildModelActionRunner implements CompositeBuildActionRunn
             startParameter.setProjectDir(participant.getProjectDir());
             startParameter.setSearchUpwards(false);
 
+            ServiceRegistry buildScopedServices = new BuildSessionScopeServices(compositeServices, startParameter, ClassPath.EMPTY);
+
             DefaultBuildRequestContext requestContext = new DefaultBuildRequestContext(new DefaultBuildRequestMetaData(new GradleLauncherMetaData(), System.currentTimeMillis()), new DefaultBuildCancellationToken(), new NoOpBuildEventConsumer());
-            GradleLauncher launcher = launcherFactory.newInstance(startParameter, requestContext, sharedServices);
+            GradleLauncher launcher = launcherFactory.newInstance(startParameter, requestContext, buildScopedServices);
             try {
                 launcher.run();
             } finally {
@@ -108,13 +122,20 @@ public class CompositeBuildModelActionRunner implements CompositeBuildActionRunn
         }
     }
 
-    // TODO:DAZ Need to fix this for `BuildEnvironment`
     private <T> Map<Object, Object> fetchCompositeModelsInProcess(BuildModelAction modelAction, Class<T> modelType, List<GradleParticipantBuild> participantBuilds,
                                                                   BuildCancellationToken cancellationToken, ServiceRegistry sharedServices) {
         final Map<Object, Object> results = new HashMap<Object, Object>();
 
         PayloadSerializer payloadSerializer = sharedServices.get(PayloadSerializer.class);
         GradleLauncherFactory gradleLauncherFactory = sharedServices.get(GradleLauncherFactory.class);
+        CompositeBuildContext context = constructCompositeContext(gradleLauncherFactory, participantBuilds);
+
+        DefaultServiceRegistry compositeServices = (DefaultServiceRegistry) ServiceRegistryBuilder.builder()
+            .displayName("Composite services")
+            .parent(sharedServices)
+            .build();
+        compositeServices.add(CompositeBuildContext.class, context);
+        compositeServices.addProvider(new CompositeScopeServices(modelAction.getStartParameter(), compositeServices));
 
         BuildActionRunner runner = new ClientProvidedBuildActionRunner();
         org.gradle.launcher.exec.BuildActionExecuter<BuildActionParameters> buildActionExecuter = new InProcessBuildActionExecuter(gradleLauncherFactory, runner);
@@ -132,7 +153,7 @@ public class CompositeBuildModelActionRunner implements CompositeBuildActionRunn
             StartParameter startParameter = modelAction.getStartParameter().newInstance();
             startParameter.setProjectDir(participant.getProjectDir());
 
-            ServiceRegistry buildScopedServices = new BuildSessionScopeServices(sharedServices, startParameter, ClassPath.EMPTY);
+            ServiceRegistry buildScopedServices = new BuildSessionScopeServices(compositeServices, startParameter, ClassPath.EMPTY);
 
             ClientProvidedBuildAction mappedAction = new ClientProvidedBuildAction(startParameter, serializedAction, modelAction.getClientSubscriptions());
 
@@ -162,6 +183,15 @@ public class CompositeBuildModelActionRunner implements CompositeBuildActionRunn
 
     private DefaultProjectIdentity convertToProjectIdentity(InternalProjectIdentity internalProjectIdentity) {
         return new DefaultProjectIdentity(new DefaultBuildIdentity(internalProjectIdentity.rootDir), internalProjectIdentity.rootDir, internalProjectIdentity.projectPath);
+    }
+
+    private CompositeBuildContext constructCompositeContext(GradleLauncherFactory gradleLauncherFactory, List<GradleParticipantBuild> participantBuilds) {
+        CompositeContextBuilder builder = new CompositeContextBuilder(gradleLauncherFactory);
+        for (GradleParticipantBuild participant : participantBuilds) {
+            final String participantName = participant.getProjectDir().getName();
+            builder.addParticipant(participantName, participant.getProjectDir());
+        }
+        return builder.build();
     }
 
     private static final class FetchPerProjectModelAction implements org.gradle.tooling.BuildAction<Map<Object, Object>> {
